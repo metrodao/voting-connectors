@@ -4,6 +4,6 @@ module.exports = {
     'test',
     '@aragon/os',
     '@aragon/apps-voting',
-    '@aragonone/voting-connectors-contract-utils',
+    '@1hive/voting-connectors-contract-utils',
   ]
 }

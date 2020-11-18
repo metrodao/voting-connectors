@@ -1,4 +1,4 @@
-# Token Wrapper
+# Hooked Token Wrapper
 
 Token Wrapper is an Aragon app offering a checkpointed ERC20 token interface that is usable in Aragon Voting applications. Its purpose is to bridge external, "vanilla" ERC20 tokens to a checkpointed token.
 
@@ -10,18 +10,20 @@ The `TokenWrapper` contract was [last professionally audited in 2020-01](../../A
 
 This version was published to aragonPM as `token-wrapper.hatch.aragonpm.eth`.
 
+The current version of the contract includes hooks, and has not been audited yet. It was published as `hooked-token-wrapper.open.aragonpm.eth`.
+
 ## Caveats
 
 In efforts to save gas costs and space to introduce the checkpointing, token amounts are limited to `uint192`. This should not pose a problem for any token, but as `uint192` supports a _very_ large range of numbers, but the TokenWrapper will stop accepting deposits once if it hits `2^192 - 1`.
 
 ## Installation Tutorial
 
-**Prerequisites:** [aragonCLI](https://hack.aragon.org/docs/cli-intro) is needed to install the Token Wrapper into a DAO. Also note that you may have to change `--env aragon:rinkeby` for `--env aragon:mainnet` if the organization is on mainnet.
+**Prerequisites:** [aragonCLI](https://hack.aragon.org/docs/cli-intro) is needed to install the Hooked Token Wrapper into a DAO. Also note that you may have to change `--env aragon:rinkeby` for `--env aragon:mainnet` if the organization is on mainnet.
 
 ### 1. The first step is to install the Token Wrapper into your DAO:
 
 ```
-dao install <DAO address> token-wrapper.hatch.aragonpm.eth --app-init-args <token address> <wrapped token name> <wrapped token symbol> --env aragon:rinkeby
+dao install <DAO address> hooked-token-wrapper.open.aragonpm.eth --app-init-args <token address> <wrapped token name> <wrapped token symbol> --env aragon:rinkeby
 ```
 
 The `token address` is the address of the ERC20 token you would like to "wrap" into an organizational token.

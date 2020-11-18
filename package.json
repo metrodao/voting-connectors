@@ -1,5 +1,5 @@
 {
-  "name": "@aragonone/voting-connectors",
+  "name": "@1hive/voting-connectors",
   "version": "1.0.0",
   "private": true,
   "author": "Aragon One <legal@aragon.one>",
@@ -11,19 +11,19 @@
   },
   "scripts": {
     "install": "node scripts/install",
-    "bootstrap": "lerna bootstrap --hoist --nohoist=@aragon/* --nohoist=@aragonone/*",
+    "bootstrap": "lerna bootstrap --hoist --nohoist=@aragon/* --nohoist=@1hive/*",
     "bootstrap:ci": "npm run bootstrap -- --no-ci",
     "clean": "git clean -fdxi apps",
     "test": "npm run test:all",
-    "test:all": "lerna run --scope=@aragonone/* --concurrency=1 --stream test",
-    "test:token-wrapper": "lerna run --scope=@aragonone/apps-token-wrapper --stream test",
-    "test:voting-aggregator": "lerna run --scope=@aragonone/apps-voting-aggregator --stream test",
-    "test:shared": "lerna run --scope=@aragonone/voting-connectors-* --stream test",
+    "test:all": "lerna run --scope=@1hive/* --concurrency=1 --stream test",
+    "test:token-wrapper": "lerna run --scope=@1hive/apps-token-wrapper --stream test",
+    "test:voting-aggregator": "lerna run --scope=@1hive/apps-voting-aggregator --stream test",
+    "test:shared": "lerna run --scope=@1hive/voting-connectors-* --stream test",
     "coverage": "npm run coverage:all",
-    "coverage:all": "lerna run --scope=@aragonone/* --concurrency=1 --stream coverage",
-    "coverage:token-wrapper": "lerna run --scope=@aragonone/apps-token-wrapper --stream coverage",
-    "coverage:voting-aggregator": "lerna run --scope=@aragonone/apps-voting-aggregator --stream coverage",
-    "coverage:shared": "lerna run --scope=@aragonone/voting-connectors-* --stream coverage",
-    "lint": "lerna run --scope=@aragonone/* lint"
+    "coverage:all": "lerna run --scope=@1hive/* --concurrency=1 --stream coverage",
+    "coverage:token-wrapper": "lerna run --scope=@1hive/apps-token-wrapper --stream coverage",
+    "coverage:voting-aggregator": "lerna run --scope=@1hive/apps-voting-aggregator --stream coverage",
+    "coverage:shared": "lerna run --scope=@1hive/voting-connectors-* --stream coverage",
+    "lint": "lerna run --scope=@1hive/* lint"
   }
 }

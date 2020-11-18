@@ -20,7 +20,7 @@ jobs:
       script: npm run lint
       name: "Lint"
     - script: npm run test:token-wrapper
-      name: "Token Wrapper"
+      name: "Hooked Token Wrapper"
     - script: npm run test:voting-aggregator
       name: "Voting Aggregator"
     - script: npm run test:shared
@@ -28,7 +28,7 @@ jobs:
 
     - stage: coverage
       script: npm run coverage:token-wrapper
-      name: "Token Wrapper"
+      name: "Hooked Token Wrapper"
     - script: npm run coverage:voting-aggregator
       name: "Voting Aggregator"
     - script: npm run coverage:shared

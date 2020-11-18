@@ -10,11 +10,13 @@ import "@aragon/os/contracts/common/IsContract.sol";
 import "@aragon/os/contracts/lib/math/SafeMath.sol";
 import "@aragon/os/contracts/lib/token/ERC20.sol";
 
-import "@aragonone/voting-connectors-contract-utils/contracts/Checkpointing.sol";
-import "@aragonone/voting-connectors-contract-utils/contracts/CheckpointingHelpers.sol";
-import "@aragonone/voting-connectors-contract-utils/contracts/ERC20ViewOnly.sol";
-import "@aragonone/voting-connectors-contract-utils/contracts/interfaces/IERC20WithCheckpointing.sol";
-import "@aragonone/voting-connectors-contract-utils/contracts/interfaces/IERC20WithDecimals.sol";
+import "@1hive/voting-connectors-contract-utils/contracts/Checkpointing.sol";
+import "@1hive/voting-connectors-contract-utils/contracts/CheckpointingHelpers.sol";
+import "@1hive/voting-connectors-contract-utils/contracts/ERC20ViewOnly.sol";
+import "@1hive/voting-connectors-contract-utils/contracts/interfaces/IERC20WithCheckpointing.sol";
+import "@1hive/voting-connectors-contract-utils/contracts/interfaces/IERC20WithDecimals.sol";
+
+import {ITokenManagerHook as TokenManagerHook} from "./ITokenManagerHook.sol";
 
 
 /**
@@ -32,6 +34,8 @@ contract TokenWrapper is IERC20WithCheckpointing, IForwarder, IsContract, ERC20V
     using Checkpointing for Checkpointing.History;
     using CheckpointingHelpers for uint256;
 
+    bytes32 public constant SET_HOOK_ROLE = keccak256("SET_HOOK_ROLE");
+
     string private constant ERROR_TOKEN_NOT_CONTRACT = "TW_TOKEN_NOT_CONTRACT";
     string private constant ERROR_DEPOSIT_AMOUNT_ZERO = "TW_DEPOSIT_AMOUNT_ZERO";
     string private constant ERROR_TOKEN_TRANSFER_FROM_FAILED = "TW_TOKEN_TRANSFER_FROM_FAILED";
@@ -39,6 +43,7 @@ contract TokenWrapper is IERC20WithCheckpointing, IForwarder, IsContract, ERC20V
     string private constant ERROR_INVALID_WITHDRAW_AMOUNT = "TW_INVALID_WITHDRAW_AMOUNT";
     string private constant ERROR_TOKEN_TRANSFER_FAILED = "TW_TOKEN_TRANSFER_FAILED";
     string private constant ERROR_CAN_NOT_FORWARD = "TW_CAN_NOT_FORWARD";
+    string private constant ERROR_HOOK_NON_TRANSFERABLE = "TW_HOOK_NON_TRANSFERABLE";
 
     ERC20 public depositedToken;
     string public name;
@@ -49,6 +54,9 @@ contract TokenWrapper is IERC20WithCheckpointing, IForwarder, IsContract, ERC20V
 
     // Checkpointed total supply of the deposited token
     Checkpointing.History internal totalSupplyHistory;
+
+    mapping (uint256 => TokenManagerHook) internal hooks;
+    uint256 internal hooksLength;
 
     event Deposit(address indexed entity, uint256 amount);
     event Withdrawal(address indexed entity, uint256 amount);
@@ -70,6 +78,26 @@ contract TokenWrapper is IERC20WithCheckpointing, IForwarder, IsContract, ERC20V
     }
 
     /**
+     * @notice Create a new Token Manager hook for `_hook`
+     * @param _hook Contract that will be used as Token Manager hook
+     */
+    function registerHook(address _hook) external authP(SET_HOOK_ROLE, arr(_hook)) returns (uint256) {
+        uint256 hookId = hooksLength++;
+        hooks[hookId] = TokenManagerHook(_hook);
+        hooks[hookId].onRegisterAsHook(hookId, this);
+        return hookId;
+    }
+
+    /**
+     * @notice Revoke Token Manager hook #`_hookId`
+     * @param _hookId Position of the hook to be removed
+     */
+    function revokeHook(uint256 _hookId) external authP(SET_HOOK_ROLE, arr(_hookId)) {
+        hooks[_hookId].onRevokeAsHook(_hookId, this);
+        delete hooks[_hookId];
+    }
+
+    /**
      * @notice Wrap `@tokenAmount(self.depositedToken(): address, _amount)`
      * @dev Only up to 2^192 - 1 tokens are ever allowed to be deposited, due to the underlying
      *      storage format.
@@ -78,6 +106,7 @@ contract TokenWrapper is IERC20WithCheckpointing, IForwarder, IsContract, ERC20V
     function deposit(uint256 _amount) external isInitialized {
         require(_amount > 0, ERROR_DEPOSIT_AMOUNT_ZERO);
 
+        require(_triggerOnTransferHook(msg.sender, this, _amount), ERROR_HOOK_NON_TRANSFERABLE);
         // Fetch the outside ERC20 tokens
         require(depositedToken.safeTransferFrom(msg.sender, address(this), _amount), ERROR_TOKEN_TRANSFER_FROM_FAILED);
 
@@ -115,6 +144,7 @@ contract TokenWrapper is IERC20WithCheckpointing, IForwarder, IsContract, ERC20V
         balancesHistory[msg.sender].addCheckpoint(currentBlock, newBalance.toUint192Value());
         totalSupplyHistory.addCheckpoint(currentBlock, newTotalSupply.toUint192Value());
 
+        require(_triggerOnTransferHook(this, msg.sender, _amount), ERROR_HOOK_NON_TRANSFERABLE);
         // Then return ERC20 tokens
         require(depositedToken.safeTransfer(msg.sender, _amount), ERROR_TOKEN_TRANSFER_FAILED);
 
@@ -195,5 +225,16 @@ contract TokenWrapper is IERC20WithCheckpointing, IForwarder, IsContract, ERC20V
 
     function _totalSupplyAt(uint256 _blockNumber) internal view returns (uint256) {
         return totalSupplyHistory.getValueAt(_blockNumber.toUint64Time());
+    }
+
+    function _triggerOnTransferHook(address _from, address _to, uint256 _amount) internal returns (bool transferable) {
+        transferable = true;
+        uint256 i = 0;
+        while (transferable && i < hooksLength) {
+            if (address(hooks[i]) != 0) {
+                transferable = hooks[i].onTransfer(_from, _to, _amount);
+            }
+            i++;
+        }
     }
 }

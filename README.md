@@ -19,7 +19,7 @@ An example of one such Voting app is [aragon-apps/voting](https://github.com/ara
 
 ## Included apps
 
-- **[Token Wrapper](apps/token-wrapper)**: Wrap external tokens into a checkpointed token.
+- **[Hooked Token Wrapper](apps/token-wrapper)**: Wrap external tokens into a checkpointed token.
 - **[Voting Aggregator](apps/voting-aggregator)**: Aggregate voting power over multiple sources.
 
 Each of the individual apps come with a frontend that is intended to be installed and used through the [Aragon client](http://github.com/aragon/aragon).
@@ -38,7 +38,7 @@ This installs global package dependencies and also bootstraps the entire monorep
 
 > **Note**: the monorepo is set up in such a way that you **must** install it through a `lerna bootstrap` (done automatically after an `npm install`).
 >
-> If you're only interested in bootstrapping one package, you can use `npx lerna bootstrap --scope @aragon/<package> --include-filtered-dependencies`
+> If you're only interested in bootstrapping one package, you can use `npx lerna bootstrap --scope @1hive/<package> --include-filtered-dependencies`
 
 Running tests on all apps can be done by running `npm run test` at the root directory (note that running all of the tests can take a significant amount of time!).
 

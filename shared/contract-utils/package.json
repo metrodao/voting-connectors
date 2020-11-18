@@ -1,5 +1,5 @@
 {
-  "name": "@aragonone/voting-connectors-contract-utils",
+  "name": "@1hive/voting-connectors-contract-utils",
   "version": "1.0.0",
   "description": "Shared contract utilities for voting connectors",
   "author": "Aragon One <legal@aragon.one>",

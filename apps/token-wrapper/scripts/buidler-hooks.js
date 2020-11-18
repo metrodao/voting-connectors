@@ -54,7 +54,7 @@ module.exports = {
     { web3, artifacts }
   ) => {
     const voting = await _experimentalAppInstaller('voting', {
-      initializeArgs: [token.address, ...VOTING_SETTINGS],
+      initializeArgs: [proxy.address, ...VOTING_SETTINGS],
     })
     await voting.createPermission('CREATE_VOTES_ROLE')
   },
