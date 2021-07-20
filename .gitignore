@@ -18,9 +18,11 @@ lerna-debug.log
 # Ignore only for first level to select just the contract build directories
 */*/abi
 */*/build
+*/*/artifacts
 
 # lock files
 package-lock.json
+yarn.lock
 
 # Misc
 .DS_Store
