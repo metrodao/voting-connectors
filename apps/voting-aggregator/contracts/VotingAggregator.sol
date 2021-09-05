@@ -73,6 +73,7 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
         PowerSourceType sourceType;
         Checkpointing.History enabledHistory;
         Checkpointing.History weightHistory;
+        bool countInSupply;
     }
 
     string public name;
@@ -86,6 +87,7 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
     event ChangePowerSourceWeight(address indexed sourceAddress, uint256 newWeight);
     event DisablePowerSource(address indexed sourceAddress);
     event EnablePowerSource(address indexed sourceAddress);
+    event CountInSupply(address indexed sourceAddr, bool count);
 
     modifier sourceExists(address _sourceAddr) {
         require(_powerSourceExists(_sourceAddr), ERROR_NO_POWER_SOURCE);
@@ -133,6 +135,7 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
 
         PowerSource storage source = powerSourceDetails[_sourceAddr];
         source.sourceType = _sourceType;
+        source.countInSupply = true;
 
         // Start enabled and weight history
         source.enabledHistory.addCheckpoint(getBlockNumber64(), SOURCE_ENABLED_VALUE);
@@ -199,6 +202,22 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
         enabledHistory.addCheckpoint(getBlockNumber64(), SOURCE_ENABLED_VALUE);
 
         emit EnablePowerSource(_sourceAddr);
+    }
+
+    /**
+     * @notice `_count ? 'Count' : 'Do not count'` power source at `_sourceAddr` when calculating total supply
+     * @param _sourceAddr Power source's address
+     * @param _count If this power source is a staked token set this to false to prevent count the token twice in the total supply aggregation
+     */
+    function countInSupply(address _sourceAddr, bool _count)
+        external
+        auth(MANAGE_POWER_SOURCE_ROLE)
+        sourceExists(_sourceAddr)
+    {
+        PowerSource storage source = powerSourceDetails[_sourceAddr];
+        source.countInSupply = _count;
+
+        emit CountInSupply(_sourceAddr, _count);
     }
 
     // ERC20 fns - note that this token is a non-transferrable "view-only" implementation.
@@ -274,7 +293,8 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
         returns (
             PowerSourceType sourceType,
             bool enabled,
-            uint256 weight
+            uint256 weight,
+            bool countInSupply
         )
     {
         PowerSource storage source = powerSourceDetails[_sourceAddr];
@@ -282,6 +302,7 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
         sourceType = source.sourceType;
         enabled = source.enabledHistory.latestValue() == uint256(SOURCE_ENABLED_VALUE);
         weight = source.weightHistory.latestValue();
+        countInSupply = source.countInSupply;
     }
 
     /**
@@ -301,6 +322,11 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
         for (uint256 i = 0; i < powerSources.length; i++) {
             address sourceAddr = powerSources[i];
             PowerSource storage source = powerSourceDetails[sourceAddr];
+
+            // Do not count in supply tokens that are flagged as representations of other already counted tokens
+            if (_callType == CallType.TotalSupplyAt && !source.countInSupply) {
+                continue;
+            }
 
             if (source.enabledHistory.getValueAt(_blockNumberUint64) == uint256(SOURCE_ENABLED_VALUE)) {
                 bytes memory invokeData = abi.encodePacked(_selectorFor(_callType, source.sourceType), _paramdata);
