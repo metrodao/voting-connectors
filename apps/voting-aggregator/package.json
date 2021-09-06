@@ -28,6 +28,7 @@
     "prepublishOnly": "truffle compile --all && npm run abi:extract -- --no-compile"
   },
   "dependencies": {
+    "@1hive/apps-token-manager": "^3.0.5",
     "@aragon/os": "4.3.0",
     "@aragonone/voting-connectors-contract-utils": "^1.0.0"
   },

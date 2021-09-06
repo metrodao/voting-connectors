@@ -56,6 +56,10 @@
         "New weight",
         "Old weight"
       ]
+    },
+    {
+      "name": "Manage Plugged Hook",
+      "id": "MANAGE_PLUGGED_HOOK_ROLE"
     }
   ],
   "path": "contracts/VotingAggregator.sol"

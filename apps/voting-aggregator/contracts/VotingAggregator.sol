@@ -16,14 +16,17 @@ import "@aragonone/voting-connectors-contract-utils/contracts/ERC20ViewOnly.sol"
 import "@aragonone/voting-connectors-contract-utils/contracts/StaticInvoke.sol";
 import "@aragonone/voting-connectors-contract-utils/contracts/interfaces/IERC20WithCheckpointing.sol";
 
+import "@1hive/apps-token-manager/contracts/TokenManagerHook.sol";
+
 import "./interfaces/IERC900History.sol";
+import "./interfaces/ITokenManager.sol";
 
 /**
  * @title VotingAggregator
  * @notice Voting power aggregator across many sources that provides a "view-only" checkpointed
  *         ERC20 implementation.
  */
-contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ERC20ViewOnly, AragonApp {
+contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ERC20ViewOnly, AragonApp, TokenManagerHook {
     using SafeMath for uint256;
     using StaticInvoke for address;
     using Checkpointing for Checkpointing.History;
@@ -33,10 +36,12 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
     bytes32 public constant ADD_POWER_SOURCE_ROLE = keccak256("ADD_POWER_SOURCE_ROLE");
     bytes32 public constant MANAGE_POWER_SOURCE_ROLE = keccak256("MANAGE_POWER_SOURCE_ROLE");
     bytes32 public constant MANAGE_WEIGHTS_ROLE = keccak256("MANAGE_WEIGHTS_ROLE");
+    bytes32 public constant MANAGE_PLUGGED_HOOK_ROLE = keccak256("MANAGE_PLUGGED_HOOK_ROLE");
     */
     bytes32 public constant ADD_POWER_SOURCE_ROLE = 0x10f7c4af0b190fdd7eb73fa36b0e280d48dc6b8d355f89769b4f1a50a61d1929;
     bytes32 public constant MANAGE_POWER_SOURCE_ROLE = 0x79ac9d2706bbe6bcdb60a65ba8145a498f6d506aaa455baa7675dff5779cb99f;
     bytes32 public constant MANAGE_WEIGHTS_ROLE = 0xa36fcade8375289791865312a33263fdc82d07e097c13524c9d6436c0de396ff;
+    bytes32 public constant MANAGE_PLUGGED_HOOK_ROLE = 0x7a5f1c005ecfe67031fbf8abe7cf52187604c8c775eadb7eac91538837bafbaf;
 
     // Arbitrary number, but having anything close to this number would most likely be unwieldy.
     // Note the primary protection this provides is to ensure that one cannot continue adding
@@ -58,6 +63,11 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
     string private constant ERROR_SOURCE_CALL_FAILED = "VA_SOURCE_CALL_FAILED";
     string private constant ERROR_INVALID_CALL_OR_SELECTOR = "VA_INVALID_CALL_OR_SELECTOR";
 
+    string private constant ERROR_NO_CONTRACT = "VA_NO_CONTRACT";
+    string private constant ERROR_NOT_ALL_ENABLED_SOURCES_HOOKED = "VA_NOT_ALL_ENABLED_SOURCES_HOOKED";
+    string private constant ERROR_HOOK_NOT_PLUGGED_YET = "VA_HOOK_NOT_PLUGGED_YET";
+    string private constant ERROR_HOOK_ALREADY_PLUGGED = "VA_HOOK_ALREADY_PLUGGED";
+
     enum PowerSourceType {
         Invalid,
         ERC20WithCheckpointing,
@@ -74,6 +84,7 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
         Checkpointing.History enabledHistory;
         Checkpointing.History weightHistory;
         bool countInSupply;
+        bool isHooked;
     }
 
     string public name;
@@ -83,6 +94,8 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
     mapping (address => PowerSource) internal powerSourceDetails;
     address[] public powerSources;
 
+    TokenManagerHook pluggedHook;
+
     event AddPowerSource(address indexed sourceAddress, PowerSourceType sourceType, uint256 weight);
     event ChangePowerSourceWeight(address indexed sourceAddress, uint256 newWeight);
     event DisablePowerSource(address indexed sourceAddress);
@@ -91,6 +104,16 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
 
     modifier sourceExists(address _sourceAddr) {
         require(_powerSourceExists(_sourceAddr), ERROR_NO_POWER_SOURCE);
+        _;
+    }
+
+    modifier isPlugged() {
+        require(pluggedHook != address(0x0), ERROR_HOOK_NOT_PLUGGED_YET);
+        _;
+    }
+
+    modifier isNotPlugged() {
+        require(pluggedHook == address(0x0), ERROR_HOOK_ALREADY_PLUGGED);
         _;
     }
 
@@ -117,6 +140,7 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
     function addPowerSource(address _sourceAddr, PowerSourceType _sourceType, uint256 _weight)
         external
         authP(ADD_POWER_SOURCE_ROLE, arr(_sourceAddr, _weight))
+        isNotPlugged
     {
         // Sanity check arguments
         require(
@@ -153,6 +177,7 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
         external
         authP(MANAGE_WEIGHTS_ROLE, arr(_weight, powerSourceDetails[_sourceAddr].weightHistory.latestValue()))
         sourceExists(_sourceAddr)
+        isNotPlugged
     {
         require(_weight > 0, ERROR_ZERO_WEIGHT);
 
@@ -172,6 +197,7 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
         external
         authP(MANAGE_POWER_SOURCE_ROLE, arr(uint256(0)))
         sourceExists(_sourceAddr)
+        isNotPlugged
     {
         Checkpointing.History storage enabledHistory = powerSourceDetails[_sourceAddr].enabledHistory;
         require(
@@ -192,6 +218,7 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
         external
         sourceExists(_sourceAddr)
         authP(MANAGE_POWER_SOURCE_ROLE, arr(uint256(1)))
+        isNotPlugged
     {
         Checkpointing.History storage enabledHistory = powerSourceDetails[_sourceAddr].enabledHistory;
         require(
@@ -218,6 +245,40 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
         source.countInSupply = _count;
 
         emit CountInSupply(_sourceAddr, _count);
+    }
+
+    /**
+     * @notice Plug `_hook` to receive voting token distribution changes
+     * @param _hook Contract to plug
+     */
+    function plugTokenManagerHook(TokenManagerHook _hook)
+        external
+        auth(MANAGE_PLUGGED_HOOK_ROLE)
+        isNotPlugged
+    {
+        require(isContract(_hook), ERROR_NO_CONTRACT);
+        for (uint256 i = 0; i < powerSources.length; i++) {
+            address sourceAddr = powerSources[i];
+            PowerSource storage source = powerSourceDetails[sourceAddr];
+            require(
+                source.enabledHistory.latestValue() == SOURCE_DISABLED_VALUE || source.isHooked,
+                ERROR_NOT_ALL_ENABLED_SOURCES_HOOKED
+            );
+        }
+        pluggedHook = _hook;
+        pluggedHook.onRegisterAsHook(0, this);
+    }
+
+    /**
+     * Unplug already existing token manager hook
+     */
+    function unplugTokenManagerHook()
+        external
+        auth(MANAGE_PLUGGED_HOOK_ROLE)
+        isPlugged
+    {
+        pluggedHook.onRevokeAsHook(0, this);
+        delete pluggedHook;
     }
 
     // ERC20 fns - note that this token is a non-transferrable "view-only" implementation.
@@ -366,6 +427,30 @@ contract VotingAggregator is IERC20WithCheckpointing, IForwarder, IsContract, ER
         }
 
         revert(ERROR_INVALID_CALL_OR_SELECTOR);
+    }
+
+    /**
+     * @dev Overrides TokenManagerHook's `_onRegisterAsHook`
+     */
+    function _onRegisterAsHook(address _tokenManager, uint256 _hookId, address _token) internal sourceExists(_token) {
+        powerSourceDetails[_token].isHooked = true;
+    }
+
+    /**
+     * @dev Overrides TokenManagerHook's `_onTransfer`
+     */
+    function _onTransfer(address _from, address _to, uint256 _amount) internal returns (bool) {
+        address sourceAddr = ITokenManager(msg.sender).token();
+        PowerSource storage source = powerSourceDetails[sourceAddr];
+        uint256 weight = source.weightHistory.latestValue();
+        return pluggedHook.onTransfer(_from, _to, _amount.mul(weight));
+    }
+
+    /**
+     * @dev Overrides TokenManagerHook's `_onRevokeAsHook`
+     */
+    function _onRevokeAsHook(uint256 _hookId, address _token) internal {
+        powerSourceDetails[_token].isHooked = false;
     }
 
     // Private functions
